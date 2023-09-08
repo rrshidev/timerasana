@@ -21,69 +21,10 @@ class Database:
         with self.session() as session:
             with session.begin():
                 query = session \
-                    .execute(select(User.id) \
+                    .execute(select(User.tg_id) \
                              .where(User.tg_id.__eq__(tg_id))) \
                     .scalar()
                 return bool(query)
-
-    def get_user_id(self, tg_id):
-        with self.session() as session:
-            with session.begin():
-                query = session \
-                    .execute(select(User.id) \
-                             .where(User.tg_id.__eq__(tg_id))) \
-                    .scalar()
-                return query
-
-    def get_wishes(self, tg_id):
-        with self.session() as session:
-            with session.begin():
-                user_id = session \
-                    .execute(select(User.id) \
-                             .where(User.tg_id.__eq__(tg_id))) \
-                    .scalar()
-                query = session \
-                    .execute(
-                    select(Wishlist.id, Wishlist.name, Wishlist.gift_image, Wishlist.gift_link, Wishlist.is_reserved) \
-                        .where(and_(Wishlist.user_id.__eq__(user_id), Wishlist.is_active.__eq__(1)))) \
-                    .fetchall()
-                return [dict(row) for row in query if query]
-
-    def get_friend_wishes(self, friend_id):
-        with self.session() as session:
-            with session.begin():
-                user_id = session \
-                    .execute(select(User.id) \
-                             .where(User.id.__eq__(friend_id))) \
-                    .scalar()
-                query = session \
-                    .execute(
-                    select(Wishlist.id, Wishlist.name, Wishlist.gift_image, Wishlist.gift_link, Wishlist.is_reserved) \
-                        .where(and_(Wishlist.user_id.__eq__(user_id), Wishlist.is_active.__eq__(1)))) \
-                    .fetchall()
-                return [dict(row) for row in query if query]
-
-    def get_ids(self):
-        with self.session() as session:
-            with session.begin():
-                ids = session.execute(select(User.id)).fetchall()
-                return ids
-
-    def get_friend_data(self, id):
-        with self.session() as session:
-            with session.begin():
-                user_data = session.query(User.fullname, User.birthdate, User.phone, User.id).filter(User.id == id).all()
-                return user_data
-
-    def check_id(self):
-        with self.session() as session:
-            with session.begin():
-                ids = session.execute(select(User.id)).fetchall()
-                random_id = randint(100000, 999999)
-                if random_id not in ids:
-                    return random_id
-                else:
-                    self.check_id(self)
 
     def add_user(self, user_data):
         with self.session() as session:
@@ -91,22 +32,87 @@ class Database:
                 data = User(**user_data)
                 session.add(data)
 
-    def add_gift(self, wishlist_data):
-        with self.session() as session:
-            with session.begin():
-                data = Wishlist(**wishlist_data)
-                session.add(data)
-
-    def del_gift(self, gift_id):
-        with self.session() as session:
-            with session.begin():
-                session.query(Wishlist) \
-                    .where(Wishlist.id.__eq__(gift_id)) \
-                    .update({Wishlist.is_active: 0})
-
-    def book_gift(self, gift_id):
-        with self.session() as session:
-            with session.begin():
-                session.query(Wishlist) \
-                    .where(Wishlist.id.__eq__(gift_id)) \
-                    .update({Wishlist.is_reserved: 1})
+    # def get_user_id(self, tg_id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             query = session \
+    #                 .execute(select(User.id) \
+    #                          .where(User.tg_id.__eq__(tg_id))) \
+    #                 .scalar()
+    #             return query
+    #
+    # def get_wishes(self, tg_id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             user_id = session \
+    #                 .execute(select(User.id) \
+    #                          .where(User.tg_id.__eq__(tg_id))) \
+    #                 .scalar()
+    #             query = session \
+    #                 .execute(
+    #                 select(Wishlist.id, Wishlist.name, Wishlist.gift_image, Wishlist.gift_link, Wishlist.is_reserved) \
+    #                     .where(and_(Wishlist.user_id.__eq__(user_id), Wishlist.is_active.__eq__(1)))) \
+    #                 .fetchall()
+    #             return [dict(row) for row in query if query]
+    #
+    # def get_friend_wishes(self, friend_id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             user_id = session \
+    #                 .execute(select(User.id) \
+    #                          .where(User.id.__eq__(friend_id))) \
+    #                 .scalar()
+    #             query = session \
+    #                 .execute(
+    #                 select(Wishlist.id, Wishlist.name, Wishlist.gift_image, Wishlist.gift_link, Wishlist.is_reserved) \
+    #                     .where(and_(Wishlist.user_id.__eq__(user_id), Wishlist.is_active.__eq__(1)))) \
+    #                 .fetchall()
+    #             return [dict(row) for row in query if query]
+    #
+    # def get_ids(self):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             ids = session.execute(select(User.id)).fetchall()
+    #             return ids
+    #
+    # def get_friend_data(self, id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             user_data = session.query(User.fullname, User.birthdate, User.phone, User.id).filter(User.id == id).all()
+    #             return user_data
+    #
+    # def check_id(self):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             ids = session.execute(select(User.id)).fetchall()
+    #             random_id = randint(100000, 999999)
+    #             if random_id not in ids:
+    #                 return random_id
+    #             else:
+    #                 self.check_id(self)
+    #
+    # def add_user(self, user_data):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             data = User(**user_data)
+    #             session.add(data)
+    #
+    # def add_gift(self, wishlist_data):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             data = Wishlist(**wishlist_data)
+    #             session.add(data)
+    #
+    # def del_gift(self, gift_id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             session.query(Wishlist) \
+    #                 .where(Wishlist.id.__eq__(gift_id)) \
+    #                 .update({Wishlist.is_active: 0})
+    #
+    # def book_gift(self, gift_id):
+    #     with self.session() as session:
+    #         with session.begin():
+    #             session.query(Wishlist) \
+    #                 .where(Wishlist.id.__eq__(gift_id)) \
+    #                 .update({Wishlist.is_reserved: 1})
