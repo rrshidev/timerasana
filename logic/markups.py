@@ -21,17 +21,17 @@ def choose_practice():
     return markup
 
 
-def practice_stop_process(countdown):
+def practice_stop_process():
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Пауза", callback_data=pauseMeditationProcess.new(countdown=countdown)))
-    markup.add(InlineKeyboardButton("Закончить практику", callback_data="stop"))
+    markup.add(InlineKeyboardButton("Пауза", callback_data='Pause'))
+    markup.add(InlineKeyboardButton("Закончить практику", callback_data="Stop"))
     return markup
 
 
 def practice_continue_process():
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    markup.row(types.KeyboardButton("Продолжить"))
-    markup.row(types.KeyboardButton("Закончить практику"))
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("Возобновить", callback_data='Resume'))
+    markup.add(InlineKeyboardButton("Закончить практику", callback_data="Stop"))
     return markup
 
 
@@ -47,11 +47,16 @@ def step_back_markup():
     markup.row(types.KeyboardButton("Выбрать тип практики"))
     return markup
 
-
 def enter_markup():
     markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
     markup.row(types.KeyboardButton("Начать практику"))
     return markup
+
+def yes_no_markup():
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    markup.row(types.KeyboardButton("Да"))
+    markup.row(types.KeyboardButton("Назад"))
+    return markup 
 
 #
 #

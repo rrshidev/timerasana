@@ -1,10 +1,6 @@
+from asyncio import exceptions
 from datetime import datetime
-from aiogram import types
-from aiogram.types import callback_query, InlineKeyboardButton, InlineKeyboardMarkup
-
-import const.classes
 from db.db_connector import Database
-from const.const import *
 from . import markups
 import re
 import time
@@ -12,7 +8,10 @@ from . import states
 import random
 from sqlalchemy import DateTime
 from .utils import get_callback
+from .messages import timer_message
 from . import memory
+import asyncio
+import const.const as const
 
 
 class Controller:
@@ -25,13 +24,13 @@ class Controller:
         tg_id = message.from_user.id
         tg_nickname = message.from_user.username
         user_data = {
-            'name': name,
             'tg_id': tg_id,
+            'name': name,
             'tg_nickname': tg_nickname
         }
         if self.db.is_user_exist(tg_id=message.from_user.id):
             markup = markups.start_markup()
-            text = f'<b>Намаскар, {name}! Я таймер-бот для йогических практик!\n\n\nДА ПРИБУДЕТ С ТОБОЙ СИЛА!</b>'
+            text = f'<b>Намаскар, {name}! Я таймер-бот для йогических практик!\n\n Рекомендую в настройках этого чата установить другую мелодию оповещения, чтобы ты мог отличать сообщения таймера от других по звуку и не отвлекался от практики!\n\n\nДА ПРИБУДЕТ С ТОБОЙ СИЛА!</b>'
             return dict(text=text, markup=markup)
         else:
             self.db.add_user(user_data=user_data)
@@ -44,6 +43,7 @@ class Controller:
         text = 'Выбери раздел и следуй инструкциям. \nЖелаю хорошей практики...'
         return dict(text=text, markup=markup)
 
+# meditation
     async def meditation(self, message, state):
         markup = markups.step_back_markup()
         text = 'Введи количество минут для медитации и начинай практику.\n' \
@@ -51,13 +51,283 @@ class Controller:
         await state.set_state(states.Meditation.time)
         return dict(text=text, markup=markup)
 
-    async def get_time(self, message, state):
-        time_pattern = r'[+]?\d+$'
+#get time for meditation and start practice!
+    #async def get_time(self, message, state):
+    async def get_time(self, message, count: int):
+        print('test1', const.timer_paused, const.timer_stopped)
+        sec_count = 60 * count
+        
+        while sec_count > 0:
+            print('test:', sec_count, const.timer_paused, const.timer_stopped)
+            if const.timer_stopped:
+                break
 
-        if re.fullmatch(time_pattern, message.text):
+            mins, secs = divmod(sec_count, 60)
+            timer = '{:02d}:{:02d}'.format(mins, secs)
+
+            if not const.timer_paused:        
+                sec_count -= 1
+                const.timer_rest = timer
+                try:
+                    await message.edit_text(
+                        text=timer_message(total=count, rest=timer, status=not const.timer_paused),
+                        reply_markup=markups.practice_stop_process(),
+                    )
+                except exceptions.MessageNotModified:
+                    pass
+
+            await asyncio.sleep(1)
+        
+        if const.timer_stopped:
+            text = "Таймер остановлен!"
+            markup = markups.choose_practice()
+        if not const.timer_stopped:    
+            print('test3', const.timer_paused, const.timer_stopped)
+            text = 'Практика окончена!'
+            markup = markups.step_back_markup()
+            
+        return await message.reply(text=text, reply_markup=markup)
+
+    
+
+#prana+get count
+    async def pranayama(self, message, state):
+        markup = markups.back_markup()
+        text = 'Введи количество упражнений пранаямы'
+        await state.set_state(states.PranaYama.count)
+        return dict(text=text, markup=markup)
+
+
+#get prana time
+    async def prana_time(self, message, state):
+        count_pattern = r'[+]?\d+$'
+        if re.fullmatch(count_pattern, message.text):
+            async with state.proxy() as data:    
+                data['count'] = message.text
+                markup = markups.step_back_markup()
+                text = 'Введи количество минут на 1 упражнение:'
+                await state.set_state(states.PranaYama.prana_time) 
+        else:
+            markup = markups.step_back_markup()
+            text = 'Повтори ввод количества минут для пранаямы. \n\nДолжно быть целое число'
+            await state.set_state(states.PranaYama.count)
+        return dict(text=text, markup=markup)
+ 
+ #get reload
+    async def get_reload_time(self, message, state):
+        prana_time_pattern = r'[+]?\d+$'
+        if re.fullmatch(prana_time_pattern, message.text):
+            async with state.proxy() as data:    
+                data['prana_time'] = message.text
+                markup = markups.step_back_markup()
+                text = 'Введи количество секунд на перевод дыхания и отдых между пранаямами:'
+                await state.set_state(states.PranaYama.reload)
+        else:
+            markup = markups.step_back_markup()
+            text = 'Повтори ввод количества минут для пранаямы. \n\nДолжно быть целое число'
+            await state.set_state(states.PranaYama.prana_time)
+        return dict(text=text, markup=markup)
+
+#get meditation time
+    async def get_medidation_time(self, message, state):
+        reload_pattern = r'[+]?\d+$'
+        if re.fullmatch(reload_pattern, message.text):
+            async with state.proxy() as data:    
+                data['reload'] = message.text
+                markup = markups.step_back_markup()
+                text = 'Введи количество минут для медитации в конце пранаямы:'
+                await state.set_state(states.PranaYama.meditation_time)
+        else:
+            markup = markups.step_back_markup()
+            text = 'Повтори ввод количества секунд для перевода дыхания и отдыха. \n\nДолжно быть целое число'
+            await state.set_state(states.PranaYama.reload)
+        return dict(text=text, markup=markup)
+    
+#start pranayama
+    async def practice_time(self, message, state):
+        name = message.from_user.first_name
+        tg_id = message.from_user.id
+        meditaion_time_pattern = r'[+]?\d+$'
+        if re.fullmatch(meditaion_time_pattern, message.text):
+            async with state.proxy() as data:   
+                data['meditation_time'] = message.text
+                prana_data = {
+                    'tg_id': tg_id,
+                    'name': name,
+                    'count': data['count'],
+                    'prana_time': data['prana_time'],
+                    'reload': data['reload'],
+                    'meditation_time': data['meditation_time'],
+                }
+                self.db.add_prana_data(prana_data=prana_data)
+                count = int(data['count']) 
+                prana_time = int(data['prana_time']) * 60
+                reload_time = int(data['reload'])
+                meditation_time = int(data['meditation_time']) *60  
+                cnt = 0
+                for i in range(0, count):
+                    cnt += 1
+                    edit_message = await message.answer(text=f'Идёт практика прнаямы: упражнение №{cnt}')
+
+                    for countdown in range(prana_time, 0, -1):
+                        mins, secs = divmod(countdown, 60)
+                        timer = '{:02d}:{:02d}'.format(mins, secs)
+                        time.sleep(1)
+                        await edit_message.edit_text(text=f'Идёт практика прнаямы: упражнение №{cnt}\n\nОставшееся время: {timer}',
+                                                    reply_markup=markups.practice_stop_process())
+                    if cnt != count:
+                        for countdown in range(reload_time, 0, -1):
+                            mins, secs = divmod(countdown, 60)
+                            timer = '{:02d}:{:02d}'.format(mins, secs)
+                            time.sleep(1)
+                            await edit_message.edit_text(text=f'Отдохни! Переведи дух! Сконцентрируйте в одной точке!\
+                                                        Оставшееся время отдыха: {timer}',
+                                                        reply_markup=markups.practice_stop_process())
+                    else:
+                        for countdown in range(meditation_time, 0, -1):
+                            mins, secs = divmod(countdown, 60)
+                            timer = '{:02d}:{:02d}'.format(mins, secs)
+                            time.sleep(1)
+                            await edit_message.edit_text(text=f'Медитация... иди на свет... Ом... \
+                                                        Оставшееся время Шавасаны: {timer}',
+                                                        reply_markup=markups.practice_stop_process())    
+
+            text = 'Практика окончена!'
+            markup = markups.step_back_markup()
+        else:
+            text = 'Не похоже на количество минут. Введи любое целое число.'
+            markup = markups.step_back_markup()
+            await state.set_state(states.PranaYama.meditation_time)
+        await state.finish()
+        return dict(text=text, markup=markup)
+
+    
+    
+    
+   #asana
+   
+    async def asana(self, message, state):
+        markup = markups.step_back_markup()
+        text = 'Введи количество асан в твоём комплексе:'
+        await state.set_state(states.Asana.count)
+        return dict(text=text, markup=markup)
+   
+   #get asana time 
+    async def get_asana_time(self, message, state):
+        count_pattern = r'[+]?\d+$'
+        async with state.proxy() as data:
+            if re.fullmatch(count_pattern, message.text):
+                async with state.proxy() as data:    
+                    data['count'] = message.text
+                    markup = markups.step_back_markup()
+                    text = 'Введи количество минут в асане:'
+                    await state.set_state(states.Asana.asana_time)
+                
+            else:
+                markup = markups.step_back_markup()
+                text = 'Повтори ввод количества асан.\n\nДолжно быть целое число!'
+                await state.set_state(states.Asana.count)
+        return dict(text=text, markup=markup)
+  
+    #get relax time
+    async def get_relax_time(self, message, state):
+        asana_time_pattern = r'[+]?\d+$'
+        async with state.proxy() as data:
+            if re.fullmatch(asana_time_pattern, message.text):
+                async with state.proxy() as data:    
+                    data['asana_time'] = message.text
+                    markup = markups.step_back_markup()
+                    text = 'Введи количество минут для отдыха между асанами:'
+                    await state.set_state(states.Asana.relax_time)
+                    
+            else:
+                markup = markups.step_back_markup()
+                text = 'Повтори ввод количества минут для асаны. \n\nДолжно быть целое число'
+                await state.set_state(states.Asana.asana_time)
+        return dict(text=text, markup=markup)
+    
+
+    #get shavasana time
+    async def get_shavasana_time(self, message, state):
+        relax_time_pattern = r'[+]?\d+$'
+        if re.fullmatch(relax_time_pattern, message.text):
+            async with state.proxy() as data:    
+                data['relax_time'] = message.text
+                markup = markups.step_back_markup()
+                text = 'Введи количество минут для шавасаны в конце конце комплекса:'
+                await state.set_state(states.Asana.shavasana_time)  
+        else:
+            markup = markups.step_back_markup()
+            text = 'Повтори ввод количества минут для отдыха между асанами. \n\nДолжно быть целое число'
+            await state.set_state(states.Asana.relax_time)
+        return dict(text=text, markup=markup)
+            
+    async def startasana(self, message, state):
+        name = message.from_user.first_name
+        tg_id = message.from_user.id
+        shavasana_time_pattern = r'[+]?\d+$'
+        if re.fullmatch(shavasana_time_pattern, message.text):
+            async with state.proxy() as data:   
+                data['shavasana_time'] = message.text
+                asana_data = {
+                    'tg_id': tg_id,
+                    'name': name,
+                    'count': data['count'],
+                    'asana_time': data['asana_time'],
+                    'relax_time': data['relax_time'],
+                    'shavasana_time': data['shavasana_time'],
+                }
+                self.db.add_asana_data(asana_data=asana_data)
+                count = int(data['count'])
+                asana_time = int(data['asana_time']) * 60
+                relax_time = int(data['relax_time']) * 60
+                shavasana_time = int(data['shavasana_time']) * 60
+                cnt = 0
+                for i in range(0, count):
+                    cnt += 1
+                    edit_message = await message.answer(text=f'Идёт практика асаны: позиция № {cnt}')
+
+                    for countdown in range(asana_time, 0, -1):
+                        mins, secs = divmod(countdown, 60)
+                        timer = '{:02d}:{:02d}'.format(mins, secs)
+                        time.sleep(1)
+                        await edit_message.edit_text(text=f'Идёт практика асаны: позиция № {cnt}\n\nОставшееся время в асане: {timer}',
+                                                    reply_markup=markups.practice_stop_process())
+                    if cnt != count:
+                        for countdown in range(relax_time, 0, -1):
+                            mins, secs = divmod(countdown, 60)
+                            timer = '{:02d}:{:02d}'.format(mins, secs)
+                            time.sleep(1)
+                            await edit_message.edit_text(text=f'Отдохни! Сделай компенацию или Шавасану\
+                                                        Оставшееся время отдыха: {timer}',
+                                                        reply_markup=markups.practice_stop_process())
+                    else:
+                        for countdown in range(shavasana_time, 0, -1):
+                            mins, secs = divmod(countdown, 60)
+                            timer = '{:02d}:{:02d}'.format(mins, secs)
+                            time.sleep(1)
+                            await edit_message.edit_text(text=f'Практика Шавасаны! \
+                                                        Оставшееся время Шавасаны: {timer}',
+                                                        reply_markup=markups.practice_stop_process())    
+
+            text = 'Практика окончена! Намаскар!'
+            markup = markups.step_back_markup()
+        else:
+            text = 'Не похоже на количество минут. Введи любое целое число.'
+            markup = markups.step_back_markup()
+            await state.set_state(states.Asana.shavasana_time)
+        await state.finish()
+        return dict(text=text, markup=markup)
+
+
+
+
+
+
+'''work peace of code for meditaion
+
             count = int(message.text)
             sec_count = 60 * count
-            cnt = 0
             edit_message = await message.answer(text='Идёт медитация\n\n'
                                                      f'Выбранное время: {count} минут')
 
@@ -74,52 +344,11 @@ class Controller:
         else:
             text = 'Не похоже на количество минут. Введи любое целое число.'
             markup = markups.step_back_markup()
+            await state.set_state(states.Meditation.time)
         await state.finish()
         return dict(text=text, markup=markup)
+'''
 
-    async def prana_name(self, message, state):
-        markup = markups.back_markup()
-        text = 'Введи навзвание пранаямы'
-        await state.set_state(states.PranaYama.name)
-        return dict(text=text, markup=markup)
-
-    async def prana_time(self, message, state):
-        async with state.proxy() as data:
-            data['name'] = message.text
-            markup = markups.step_back_markup()
-            text = f'Введи время для упражнения {data["name"]}'
-            await state.set_state(states.PranaYama.time)
-        return dict(text=text, markup=markup)
-
-
-    async def get_prana_time(self, message, state):
-        time_pattern = r'[+]?\d+$'
-
-        if re.fullmatch(time_pattern, message.text):
-            async with state.proxy() as data:
-                count = int(message.text)
-                sec_count = 60 * count
-                cnt = 0
-                edit_message = await message.answer(text=f'Дышим пранаяму {data["name"]}\n\n'
-                                                         f'Выбранное время: {count} минут')
-
-                for countdown in range(sec_count, 0, -1):
-                    mins, secs = divmod(countdown, 60)
-                    timer = '{:02d}:{:02d}'.format(mins, secs)
-                    time.sleep(1)
-                    await edit_message.edit_text(text='Дышим пранаяму {data["name"]}\n\n'
-                                                      f'Выбранное время: {count} мин.\n\n'
-                                                      f'Оставшееся время: {timer}',
-                                                 reply_markup=markups.practice_stop_process(countdown))
-                text = 'Практика окончена!'
-                markup = markups.step_back_markup()
-        else:
-            text = 'Не похоже на количество минут. Введи любое целое число.'
-            markup = markups.step_back_markup()
-        await state.finish()
-        return dict(text=text, markup=markup)
-
-    #
     # async def enter_friend_data(self, state):
     #     markup = markups.back_markup()
     #     text = 'Введите уникальный 6-ти значный код друга:'

@@ -32,6 +32,18 @@ class Database:
                 data = User(**user_data)
                 session.add(data)
 
+    def add_prana_data(self, prana_data):
+        with self.session() as session:
+            with session.begin():
+                data = Pranayma(**prana_data)
+                session.add(data)
+
+    def add_asana_data(self, asana_data):
+        with self.session() as session:
+            with session.begin():
+                data = Asana(**asana_data)
+                session.add(data)
+
     # def get_user_id(self, tg_id):
     #     with self.session() as session:
     #         with session.begin():

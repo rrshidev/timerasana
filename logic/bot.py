@@ -1,6 +1,7 @@
+import asyncio
 import logging
 from email import message
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from os import getenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -8,15 +9,20 @@ from aiogram.dispatcher import FSMContext, filters
 from aiogram.dispatcher.filters import Text
 from aiogram.utils import callback_data
 from aiogram.utils.exceptions import *
+from logic import markups
 from .decorators import *
 from .middlewares import LoggingMiddleware, ThrottlingMiddleware
 from .controller import Controller
+from .messages import timer_message
+import const.const as const
 from . import states
 from db.db_connector import Database
-from const.classes import *
+import re
 
 # ! temp
 from dotenv import load_dotenv
+
+
 
 load_dotenv()
 
@@ -34,6 +40,7 @@ c = Controller(bot=bot)
 @dp.message_handler(commands='start')
 @dp.message_handler(Text(equals='Назад'))
 async def command_start_process(message: Message):
+    print("command_start_process")
     response = await c.command_start(message=message)
     await message.reply(
         text=response["text"],
@@ -45,7 +52,9 @@ async def command_start_process(message: Message):
 
 # Ловим бесплатный раздел
 @dp.message_handler(Text(equals='Выбрать тип практики'))
+@dp.message_handler(Text(equals='Закончить практику'))
 async def choice_of_practice_process(message: Message):
+    print("choice_of_practice_process")
     response = await c.choice_of_practice(message=message)
     await message.reply(text=response['text'],
                         reply_markup=response['markup'],
@@ -56,6 +65,7 @@ async def choice_of_practice_process(message: Message):
 # Ловим медитацию
 @dp.message_handler(Text(equals='Медитация'), state='*')
 async def meditation_process(message: Message, state: FSMContext):
+    print("meditation_process")
     response = await c.meditation(message=message, state=state)
     await message.reply(text=response['text'],
                         reply_markup=response['markup'],
@@ -67,25 +77,82 @@ async def meditation_process(message: Message, state: FSMContext):
 @dp.message_handler(filters.StateFilter(dp, states.Meditation.time))
 @dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.Meditation.time)
 async def get_time_process(message: Message, state: FSMContext):
-    response = await c.get_time(message=message, state=state)
-    await message.reply(text=response['text'],
-                        reply_markup=response['markup'],
-                        parse_mode='HTML',
-                        reply=False)
+    const.timer_stopped = False
+    const.timer_paused = False
+    print('hello world', const.timer_paused, const.timer_stopped) # отладка в консоле
+    time_pattern = r'[+]?\d+$'
+    count = int(message.text)
+    const.timer_total = count
+    if re.fullmatch(time_pattern, message.text):
+        edit_message = await message.answer(
+            text=timer_message(total=count),
+            reply_markup=markups.practice_stop_process(),
+        )
+        asyncio.create_task(c.get_time(message=edit_message, count=count))
+        await state.finish()
+    else:
+        await message.reply(text='Не похоже на количество минут. Введи любое целое число.',
+                            reply_markup = markups.step_back_markup())
+        
+    
+
+#Get callback Pause from markup
+@dp.callback_query_handler(lambda c: c.data == 'Pause')
+async def callback_pause(callback_query: types.CallbackQuery):
+    print('Pause world', const.timer_paused, const.timer_stopped)
+    if not const.timer_paused:
+        const.timer_paused = True
+        await callback_query.message.edit_text(
+            text=timer_message(
+                total=const.timer_total,
+                rest=const.timer_rest,
+                status=False,
+            ),
+            reply_markup=markups.practice_continue_process(),
+        )
+
+
+#Get callback Resume markup
+@dp.message_handler(commands="resume")
+@dp.callback_query_handler(lambda c: c.data == 'Resume')
+async def callback_resume(callback_query: types.CallbackQuery):
+    print('Resume world', const.timer_paused, const.timer_stopped)
+
+    if const.timer_paused:
+        const.timer_paused = False
+        await callback_query.message.edit_text(
+            text=timer_message(
+                total=const.timer_total,
+                rest=const.timer_rest,
+                status=True,
+            ),
+            reply_markup=markups.practice_stop_process(),
+        )
+
+
+#get callback Stop markup
+@dp.callback_query_handler(lambda c: c.data == 'Stop')
+async def cmd_stop(callback_query: types.CallbackQuery):
+    print('Stop world', const.timer_paused, const.timer_stopped)
+    if not const.timer_stopped:
+        const.timer_stopped = True
+        await bot.send_message(chat_id=callback_query.message.chat.id, text="Таймер остановлен.")
 
 
 # Ловим пранаяму
 @dp.message_handler(Text(equals='Пранаяма'), state='*')
-async def prana_process(message: Message, state: FSMContext):
-    response = await c.prana_name(message=message, state=state)
+async def pranayama(message: Message, state: FSMContext):
+    response = await c.pranayama(message=message, state=state)
     await message.reply(text=response['text'],
                         reply_markup=response['markup'],
                         parse_mode='HTML',
                         reply=False)
 
 
-# Ловим name пранаям
-@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.name)
+# Ловим количество пранаям
+@dp.message_handler(Text(equals='Назад'))
+@dp.message_handler(filters.StateFilter(dp, states.PranaYama.count))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.count)
 async def prana_time_process(message: Message, state: FSMContext):
     response = await c.prana_time(message=message, state=state)
     await message.reply(text=response['text'],
@@ -95,15 +162,89 @@ async def prana_time_process(message: Message, state: FSMContext):
 
 
 # get time of pranayam
-@dp.message_handler(filters.StateFilter(dp, states.PranaYama.time))
-@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.time)
+@dp.message_handler(filters.StateFilter(dp, states.PranaYama.prana_time))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.prana_time)
 async def get_prana_time_process(message: Message, state: FSMContext):
-    response = await c.get_prana_time(message=message, state=state)
+    response = await c.get_reload_time(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+    
+
+#get reload time
+@dp.message_handler(filters.StateFilter(dp, states.PranaYama.reload))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.reload)
+async def get_reload_time_process(message: Message, state: FSMContext):
+    response = await c.get_medidation_time(message=message, state=state)
     await message.reply(text=response['text'],
                         reply_markup=response['markup'],
                         parse_mode='HTML',
                         reply=False)
 
+
+#get meditation time
+@dp.message_handler(filters.StateFilter(dp, states.PranaYama.meditation_time))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.PranaYama.meditation_time)
+async def get_meditation_time_process(message: Message, state: FSMContext):
+    response = await c.practice_time(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+
+
+# Ловим асану
+@dp.message_handler(Text(equals='Асана'), state='*')
+async def asana_process(message: Message, state: FSMContext):
+    response = await c.asana(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+
+# Ловим количество асан
+# Ловим asana_time
+@dp.message_handler(filters.StateFilter(dp, states.Asana.count))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.Asana.count)
+async def get_asana_time_process(message: Message, state: FSMContext):
+    response = await c.get_asana_time(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+
+
+# get time of relax
+@dp.message_handler(filters.StateFilter(dp, states.Asana.asana_time))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.Asana.asana_time)
+async def get_relax_time_process(message: Message, state: FSMContext):
+    response = await c.get_relax_time(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+
+# get time of shavasana
+@dp.message_handler(filters.StateFilter(dp, states.Asana.relax_time))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.Asana.relax_time)
+async def get_shavasana_time_process(message: Message, state: FSMContext):
+    response = await c.get_shavasana_time(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+    
+#get start of asana practice
+@dp.message_handler(filters.StateFilter(dp, states.Asana.shavasana_time))
+@dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')), state=states.Asana.shavasana_time)
+async def startasana_process(message: Message, state: FSMContext):
+    response = await c.startasana(message=message, state=state)
+    await message.reply(text=response['text'],
+                        reply_markup=response['markup'],
+                        parse_mode='HTML',
+                        reply=False)
+    
 # # Ловим имя и фамилию пользователя. Предлагаем ввести дату рождения.
 # @dp.message_handler(lambda msg: not msg.text.startswith(('Назад', '/')),
 #                     # lambda msg: not c.check_user_for_existence(msg.from_user_id),
@@ -178,7 +319,7 @@ async def get_prana_time_process(message: Message, state: FSMContext):
 # # Ловим callback от кнопки УДАЛИТЬ подарок
 # @dp.callback_query_handler(WishToDelete.filter(), state='*')
 # async def del_point_from_list_process(query: CallbackQuery, callback_data: dict):
-#     response = await c.del_point_from_list(query=query, wish_id=callback_data['wish_id'])
+#     response = await c.del_point_from_list(с, wish_id=callback_data['wish_id'])
 #     await bot.send_message(chat_id=query.from_user.id,
 #                            text=response['text'],
 #                            reply_markup=response['markup'])
