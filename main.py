@@ -36,6 +36,9 @@ async def main():
     dp.message.register(command_handlers.help_command, Command("help"))
     dp.message.register(command_handlers.about_us_command, Command("about_us"))
 
+    # Главное меню (inline-кнопки)
+    dp.callback_query.register(command_handlers.about_us_callback, lambda c: c.data == "about_us")
+
     # Ввод времени медитации (цифровое сообщение)
     dp.message.register(
         timer_handlers.handle_meditation_time_input,
