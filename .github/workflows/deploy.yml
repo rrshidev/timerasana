@@ -1,0 +1,80 @@
+name: Deploy Timer Bot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Деплой таймерасаны на VPS (/opt/dharana, compose-сервис timer-bot).
+# Требуемые secrets (добавить в GitHub -> Settings -> Secrets and variables -> Actions):
+#   DHARANA_SSH_HOST   - IP VPS (212.192.22.6)
+#   DHARANA_SSH_PORT   - SSH-порт (см. ~/.ssh/config, dharana_ai)
+#   DHARANA_SSH_USER   - пользователь (yogin_ai)
+#   DHARANA_SSH_KEY    - приватный ключ целиком (BEGIN/END RSA/ED25519 без пароля)
+# Деплой копирует только исходники и не трогает /opt/dharana/.env (токен хранится там).
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest
+
+      - name: Run tests
+        run: pytest -q
+
+  deploy:
+    name: Deploy to VPS
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package sources
+        run: tar -czf timer-bot.tar.gz --exclude='__pycache__' --exclude='.pytest_cache' --exclude='.venv' --exclude='venv' --exclude='.env' --exclude='.git' .
+
+      - name: Copy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DHARANA_SSH_HOST }}
+          port: ${{ secrets.DHARANA_SSH_PORT }}
+          username: ${{ secrets.DHARANA_SSH_USER }}
+          key: ${{ secrets.DHARANA_SSH_KEY }}
+          source: "timer-bot.tar.gz"
+          target: "/tmp/timer_bot_deploy_${{ github.run_id }}"
+
+      - name: Extract, rebuild, restart, verify
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DHARANA_SSH_HOST }}
+          port: ${{ secrets.DHARANA_SSH_PORT }}
+          username: ${{ secrets.DHARANA_SSH_USER }}
+          key: ${{ secrets.DHARANA_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/dharana
+            sudo rm -rf ./timer-bot-extract
+            sudo mkdir -p ./timer-bot-extract
+            sudo tar -xzf /tmp/timer_bot_deploy_${{ github.run_id }}/timer-bot.tar.gz -C ./timer-bot-extract
+            sudo rsync -a --delete ./timer-bot-extract/ ./timer-bot/
+            sudo rm -rf ./timer-bot-extract
+            sudo chown -R root:docker ./timer-bot
+            sudo docker compose build timer-bot
+            sudo docker compose up -d timer-bot || true
+            sleep 6
+            sudo docker logs dharana-timer-bot --tail 20 || true
