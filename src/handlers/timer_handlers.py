@@ -8,6 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.services.timer_service import timer_service
 from src.utils.timer_ui import TimerUI
+from src.utils.keyboard_service import KeyboardService
 from src.models.timer_models import (
     TimerType, TimerStatus, TimerPhase, TimerConfig, PranayamaConfig, timer_messages
 )
@@ -545,7 +546,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🔙 **Выход из таймера...**",
+            text="🔙 **Выход из таймера...**\n\nВыбери действие ниже 👇",
+            reply_markup=KeyboardService.start_menu(),
             parse_mode=ParseMode.MARKDOWN
         )
 

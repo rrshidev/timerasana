@@ -25,14 +25,10 @@ class CommandHandlers:
             username=message.from_user.username or "",
         )
 
-    async def start_command(self, message: types.Message):
-        """Команда /start + кнопка «Назад»."""
-        await self._register_user(message)
-
-        name = message.from_user.first_name or message.from_user.username or ""
+    def _welcome_text(self, first_name: str, username: str) -> str:
+        name = first_name or username or ""
         greeting = f"Намаскар, {name}! 🙏" if name else "Намаскар! 🙏"
-
-        welcome_text = (
+        return (
             f"{greeting}\n\n"
             "Добро пожаловать в **TimerAsana** — таймер для йогических практик "
             "проекта **Dharana** 🧘\n\n"
@@ -45,8 +41,13 @@ class CommandHandlers:
             "• Веб-приложение — [dharana.ru](https://dharana.ru)\n\n"
             "Выбери действие ниже 👇"
         )
+
+    async def start_command(self, message: types.Message):
+        """Команда /start."""
+        await self._register_user(message)
+
         await message.reply(
-            welcome_text,
+            self._welcome_text(message.from_user.first_name, message.from_user.username),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=self.keyboard_service.start_menu(),
         )
@@ -72,10 +73,33 @@ class CommandHandlers:
         )
 
     async def about_us_command(self, message: types.Message):
-        """Команда /about_us и кнопка «О нас»."""
+        """Команда /about_us."""
         await self._register_user(message)
 
-        about_text = (
+        await message.reply(
+            self._about_text(),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=self.keyboard_service.start_menu(),
+        )
+
+    async def about_us_callback(self, callback_query: types.CallbackQuery):
+        """Кнопка «О нас»."""
+        await self.bot.answer_callback_query(callback_query.id)
+        await self.user_service.register_or_sync(
+            telegram_id=callback_query.from_user.id,
+            name=callback_query.from_user.first_name or "",
+            username=callback_query.from_user.username or "",
+        )
+        await self.bot.edit_message_text(
+            chat_id=callback_query.from_user.id,
+            message_id=callback_query.message.message_id,
+            text=self._about_text(),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=self.keyboard_service.start_menu(),
+        )
+
+    def _about_text(self) -> str:
+        return (
             "🙏 **TimerAsana — часть проекта Dharana**\n\n"
             "TimerAsana — это таймер для йогических практик: медитации, асан и пранаямы. "
             "Он создан как часть экосистемы **Dharana** — проекта, который помогает "
@@ -91,9 +115,4 @@ class CommandHandlers:
             "@RrshiDev · @yogaolleg\n"
             "instagram.com/yogaolleg/\n\n"
             "Хорошей практики! 🙏"
-        )
-        await message.reply(
-            about_text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=self.keyboard_service.start_menu(),
         )

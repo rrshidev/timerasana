@@ -1,15 +1,14 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 class KeyboardService:
-    """Reply-клавиатуры таймерасаны."""
+    """Inline-клавиатуры таймерасаны."""
 
     @staticmethod
-    def start_menu() -> ReplyKeyboardMarkup:
-        return ReplyKeyboardMarkup(
-            keyboard=[
-                [KeyboardButton(text="⏱️ Таймер")],
-                [KeyboardButton(text="🙏 О нас")],
-            ],
-            resize_keyboard=True,
+    def start_menu() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="⏱️ Таймер", callback_data="timer_main")],
+                [InlineKeyboardButton(text="🙏 О нас", callback_data="about_us")],
+            ]
         )
