@@ -8,9 +8,9 @@ on:
 # Деплой таймерасаны на VPS (/opt/dharana, compose-сервис timer-bot).
 # Требуемые secrets (добавить в GitHub -> Settings -> Secrets and variables -> Actions):
 #   DHARANA_SSH_HOST   - IP VPS (212.192.22.6)
-#   DHARANA_SSH_PORT   - SSH-порт (см. ~/.ssh/config, dharana_ai)
-#   DHARANA_SSH_USER   - пользователь (yogin_ai)
-#   DHARANA_SSH_KEY    - приватный ключ целиком (BEGIN/END RSA/ED25519 без пароля)
+#   DHARANA_SSH_PORT   - SSH-порт (7020)
+#   DHARANA_SSH_USER   - пользователь deploy (sudo ограничен: только tar и docker)
+#   DHARANA_SSH_KEY    - приватный ключ ~/.ssh/dharana_ci (dharana-ci-deploy)
 # Деплой копирует только исходники и не трогает /opt/dharana/.env (токен хранится там).
 
 jobs:
@@ -68,12 +68,7 @@ jobs:
           script: |
             set -e
             cd /opt/dharana
-            sudo rm -rf ./timer-bot-extract
-            sudo mkdir -p ./timer-bot-extract
-            sudo tar -xzf /tmp/timer_bot_deploy_${{ github.run_id }}/timer-bot.tar.gz -C ./timer-bot-extract
-            sudo rsync -a --delete ./timer-bot-extract/ ./timer-bot/
-            sudo rm -rf ./timer-bot-extract
-            sudo chown -R root:docker ./timer-bot
+            sudo tar -xzf /tmp/timer_bot_deploy_${{ github.run_id }}/timer-bot.tar.gz -C ./timer-bot
             sudo docker compose build timer-bot
             sudo docker compose up -d timer-bot || true
             sleep 6
