@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Package sources
-        run: tar -czf timer-bot.tar.gz --exclude='__pycache__' --exclude='.pytest_cache' --exclude='.venv' --exclude='venv' --exclude='.env' --exclude='.git' .
+        run: tar -czf timer-bot.tar.gz .github src tests config.py main.py pytest.ini requirements.txt Dockerfile .env.example .gitignore .dockerignore
 
       - name: Copy to server
         uses: appleboy/scp-action@v0.1.7
