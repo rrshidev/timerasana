@@ -6,9 +6,10 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 
-from config import BOT_TOKEN
+from config import BOT_TOKEN, API_URL
 from src.handlers.command_handlers import CommandHandlers
 from src.handlers.timer_handlers import TimerHandlers
+from src.services.user_service import UserService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,7 +29,7 @@ async def main():
     )
     dp = Dispatcher()
 
-    command_handlers = CommandHandlers(bot)
+    command_handlers = CommandHandlers(bot, UserService(API_URL))
     timer_handlers = TimerHandlers(bot)
 
     dp.message.register(command_handlers.start_command, CommandStart())
