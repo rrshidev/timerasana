@@ -242,8 +242,8 @@ class TimerUI:
 
         status_emoji = "⏸️" if session.status == TimerStatus.PAUSED else "🧘"
 
-        m_word = t(lang, "min_word", n=1).split()[0] if lang == "en" else "м"
-        s_word = t(lang, "sec_word", n=1).split()[0] if lang == "en" else "с"
+        m_word = "m" if lang == "en" else "м"
+        s_word = "s" if lang == "en" else "с"
         progress = (
             f"{session.elapsed // 60}{m_word} {session.elapsed % 60}{s_word} / "
             f"{session.duration // 60}{m_word} {session.duration % 60}{s_word}"
@@ -294,8 +294,8 @@ class TimerUI:
 
     @staticmethod
     def _fmt_total(session: TimerSession, lang: str) -> str:
-        m_word = t(lang, "min_word", n=1).split()[0] if lang == "en" else "м"
-        s_word = t(lang, "sec_word", n=1).split()[0] if lang == "en" else "с"
+        m_word = "m" if lang == "en" else "м"
+        s_word = "s" if lang == "en" else "с"
         return f"{session.total_elapsed // 60}{m_word} {session.total_elapsed % 60}{s_word}"
 
     @staticmethod

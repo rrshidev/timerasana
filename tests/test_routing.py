@@ -88,6 +88,64 @@ def _pred_matches(pred, data):
     return bool(pred(_CB(data)))
 
 
+class TestProgressFormat:
+    """Формат прогресса «Xм Yс / Zм Wс» должен совпадать в RU и EN (единицы локализованы)."""
+
+    def _med_session(self, elapsed, duration, paused=False):
+        from src.models.timer_models import TimerStatus
+        s = type("S", (), {
+            "timer_type": "meditation",
+            "status": TimerStatus.PAUSED if paused else TimerStatus.RUNNING,
+            "elapsed": elapsed,
+            "duration": duration,
+            "total_elapsed": elapsed,
+            "current_phase": None,
+            "current_cycle": 1,
+            "cycles": 1,
+            "rest_duration": 0,
+            "get_remaining_time": lambda self: max(duration - elapsed, 0),
+            "get_progress_bar": lambda self: "░" * 10,
+        })()
+        return s
+
+    def test_meditation_progress_en_matches_ru(self):
+        from src.utils.timer_ui import TimerUI
+        session = self._med_session(151, 660)  # 2м31с / 11м
+        ru = TimerUI._format_meditation_message(session, "ru")
+        en = TimerUI._format_meditation_message(session, "en")
+        assert "2м 31с / 11м 0с" in ru, f"RU progress сломан: {ru!r}"
+        assert "2m 31s / 11m 0s" in en, f"EN progress сломан: {en!r}"
+
+    def test_meditation_progress_zero_seconds(self):
+        from src.utils.timer_ui import TimerUI
+        session = self._med_session(60, 300)  # 1м0с / 5м0с
+        ru = TimerUI._format_meditation_message(session, "ru")
+        en = TimerUI._format_meditation_message(session, "en")
+        assert "1м 0с / 5м 0с" in ru, ru
+        assert "1m 0s / 5m 0s" in en, en
+
+    def test_state_line_total_en_matches_ru(self):
+        from src.utils.timer_ui import TimerUI
+        from src.models.timer_models import TimerPhase, TimerStatus
+        s = type("S", (), {
+            "timer_type": "asana",
+            "status": TimerStatus.RUNNING,
+            "current_phase": TimerPhase.WORK,
+            "elapsed": 120,
+            "total_elapsed": 3725,  # 62м5с
+            "current_cycle": 2,
+            "cycles": 5,
+            "rest_duration": 15,
+            "work_duration": 60,
+            "get_remaining_time": lambda self: 30,
+            "get_progress_bar": lambda self: "█" * 10,
+        })()
+        ru = TimerUI._format_asana_message(s, "ru")
+        en = TimerUI._format_asana_message(s, "en")
+        assert "62м 5с" in ru, f"RU total сломан: {ru!r}"
+        assert "62m 5s" in en, f"EN total сломан: {en!r}"
+
+
 class TestRoutingCoverage:
     def test_every_callback_data_is_routed(self):
         data = _all_callback_data()
