@@ -2,7 +2,9 @@ import logging
 
 from aiogram import types
 from aiogram.enums import ParseMode
+from aiogram.filters import Command
 
+from src.i18n import t, lang_from_telegram
 from src.services.user_service import UserService
 from src.utils.keyboard_service import KeyboardService
 
@@ -17,69 +19,58 @@ class CommandHandlers:
         self.user_service = user_service
         self.keyboard_service = KeyboardService()
 
-    async def _register_user(self, message: types.Message) -> None:
+    async def _register_user(self, message: types.Message, language: str = None) -> None:
         """При первом обращении добавляет пользователя в единую БД Dharana (app_users)."""
         await self.user_service.register_or_sync(
             telegram_id=message.from_user.id,
             name=message.from_user.first_name or "",
             username=message.from_user.username or "",
+            language=language,
         )
 
-    def _welcome_text(self, first_name: str, username: str) -> str:
+    async def _lang(self, user_id: int) -> str:
+        """Язык таймер-бота пользователя."""
+        return await self.user_service.get_language(user_id)
+
+    def _welcome_text(self, first_name: str, username: str, lang: str) -> str:
         name = first_name or username or ""
-        greeting = f"Намаскар, {name}! 🙏" if name else "Намаскар! 🙏"
+        greeting = t(lang, "welcome_greeting_name", name=name) if name else t(lang, "welcome_greeting")
         return (
             f"{greeting}\n\n"
-            "Добро пожаловать в **TimerAsana** — таймер для йогических практик "
-            "проекта **Dharana** 🧘\n\n"
-            "Что я умею:\n"
-            "• 🧘 **Медитация** — от 1 до 60 минут\n"
-            "• 🧘‍♂️ **Асана** — практика с циклами работы и отдыха\n"
-            "• 🌬️ **Пранаяма** — дыхательные упражнения с настройкой\n\n"
-            "Полезные ссылки:\n"
-            "• Основной бот Dharana — [@yogaasana_bot](https://t.me/yogaasana_bot)\n"
-            "• Веб-приложение — [dharana.ru](https://dharana.ru)\n\n"
-            "Выбери действие ниже 👇"
+            f"{t(lang, 'welcome_body')}"
         )
 
     async def start_command(self, message: types.Message):
         """Команда /start."""
-        await self._register_user(message)
+        tg_lang = lang_from_telegram(message.from_user.language_code)
+        await self._register_user(message, language=tg_lang)
+        lang = await self._lang(message.from_user.id)
 
         await message.reply(
-            self._welcome_text(message.from_user.first_name, message.from_user.username),
+            self._welcome_text(message.from_user.first_name, message.from_user.username, lang),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=self.keyboard_service.start_menu(),
+            reply_markup=self.keyboard_service.start_menu(lang),
         )
 
     async def help_command(self, message: types.Message):
         """Команда /help."""
-        help_text = (
-            "**TimerAsana** — таймер для йогических практик проекта Dharana.\n\n"
-            "🕐 **ТАЙМЕР** 🕐\n\n"
-            "🧘 **Медитация** — выбери время от 1 до 60 минут (пресеты или ручной ввод)\n"
-            "🧘‍♂️ **Асана** — настраиваемые циклы работы и отдыха (30с-3м работа, 10с-1м отдых, 3-20 циклов)\n"
-            "🌬️ **Пранаяма** — дыхательные упражнения (1-8 упражнений, 10с-2м каждое, 5с-1м отдых)\n\n"
-            "Управление во время практики: пауза, продолжить, стоп, сброс.\n\n"
-            "Команды:\n"
-            "----> /start 🚀 - Главное меню\n"
-            "----> /help ❓ - Справка\n"
-            "----> /about_us 🙏 - О проекте и авторах"
-        )
+        lang = await self._lang(message.from_user.id)
+
         await message.reply(
-            help_text,
+            t(lang, "help_text"),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=self.keyboard_service.start_menu(),
+            reply_markup=self.keyboard_service.start_menu(lang),
         )
 
     async def about_us_command(self, message: types.Message):
         """Команда /about_us."""
         await self._register_user(message)
+        lang = await self._lang(message.from_user.id)
 
         await message.reply(
-            self._about_text(),
+            t(lang, "about_text"),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=self.keyboard_service.start_menu(),
+            reply_markup=self.keyboard_service.start_menu(lang),
         )
 
     async def about_us_callback(self, callback_query: types.CallbackQuery):
@@ -90,29 +81,56 @@ class CommandHandlers:
             name=callback_query.from_user.first_name or "",
             username=callback_query.from_user.username or "",
         )
+        lang = await self._lang(callback_query.from_user.id)
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=self._about_text(),
+            text=t(lang, "about_text"),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=self.keyboard_service.start_menu(),
+            reply_markup=self.keyboard_service.start_menu(lang),
         )
 
-    def _about_text(self) -> str:
-        return (
-            "🙏 **TimerAsana — часть проекта Dharana**\n\n"
-            "TimerAsana — это таймер для йогических практик: медитации, асан и пранаямы. "
-            "Он создан как часть экосистемы **Dharana** — проекта, который помогает "
-            "делать йогу регулярной и доступной каждому.\n\n"
-            "**Dharana** включает:\n"
-            "• Основной бот [@yogaasana_bot](https://t.me/yogaasana_bot) — каталог из 100+ асан, "
-            "готовые комплексы, генератор практики, асана дня\n"
-            "• Веб-приложение [dharana.ru](https://dharana.ru)\n"
-            "• TimerAsana — этот таймер для практик\n\n"
-            "Два человека. Йога. Немного кода. И желание, чтобы ваша практика "
-            "была регулярной и приносила радость.\n\n"
-            "Связаться с нами:\n"
-            "@RrshiDev · @yogaolleg\n"
-            "instagram.com/yogaolleg/\n\n"
-            "Хорошей практики! 🙏"
+    async def language_command(self, message: types.Message):
+        """Команда /language — выбор языка."""
+        await self._register_user(message)
+        lang = await self._lang(message.from_user.id)
+
+        await message.reply(
+            t(lang, "lang_choose"),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=self.keyboard_service.language_menu(lang),
+        )
+
+    async def language_menu_callback(self, callback_query: types.CallbackQuery):
+        """Кнопка «Язык» в главном меню."""
+        await self.bot.answer_callback_query(callback_query.id)
+        await self.user_service.register_or_sync(
+            telegram_id=callback_query.from_user.id,
+            name=callback_query.from_user.first_name or "",
+            username=callback_query.from_user.username or "",
+        )
+        lang = await self._lang(callback_query.from_user.id)
+        await self.bot.edit_message_text(
+            chat_id=callback_query.from_user.id,
+            message_id=callback_query.message.message_id,
+            text=t(lang, "lang_choose"),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=self.keyboard_service.language_menu(lang),
+        )
+
+    async def language_set_callback(self, callback_query: types.CallbackQuery):
+        """Выбор языка: установить и вернуться в главное меню."""
+        await self.bot.answer_callback_query(callback_query.id)
+        user_id = callback_query.from_user.id
+
+        new_lang = "en" if callback_query.data == "lang_set_en" else "ru"
+        await self.user_service.set_language(user_id, new_lang)
+        lang = await self.user_service.get_language(user_id)
+
+        await self.bot.edit_message_text(
+            chat_id=user_id,
+            message_id=callback_query.message.message_id,
+            text=t(lang, "lang_set_en" if new_lang == "en" else "lang_set_ru"),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=self.keyboard_service.start_menu(lang),
         )

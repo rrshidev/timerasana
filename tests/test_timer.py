@@ -1,6 +1,56 @@
 import pytest
 
 
+class TestI18n:
+    def test_ru_en_keys_symmetric(self):
+        from src.i18n import RU, EN
+
+        assert set(RU.keys()) == set(EN.keys())
+
+    def test_all_cyrillic_keys_translated(self):
+        from src.i18n import RU, EN
+
+        CYRILLIC = "абвгдежзийклмнопрстуфхцчшщъыьэюя"
+        untranslated = [
+            k for k in RU
+            if any(ch in RU[k] for ch in CYRILLIC) and RU[k] == EN.get(k)
+        ]
+        # Нативные метки языковых кнопок и подтверждения на выбранном языке — ок
+        assert untranslated == ["kb_lang_ru", "lang_set_ru"]
+
+    def test_t_lang_fallback(self):
+        from src.i18n import t
+
+        assert t("en", "kb_start") is not None
+        assert t(None, "kb_start") is not None
+        assert t("fr", "kb_start") is not None
+        assert t("en", "missing_key_xyz") == "missing_key_xyz"
+
+    def test_t_format(self):
+        from src.i18n import t
+
+        s = t("ru", "dur_s", n=45)
+        assert isinstance(s, str) and "45" in s
+
+    def test_normalize_lang(self):
+        from src.i18n import normalize_lang, lang_from_telegram
+
+        assert normalize_lang("en") == "en"
+        assert normalize_lang("en-US") == "en"
+        assert normalize_lang("ru") == "ru"
+        assert normalize_lang("fr") == "ru"
+        assert normalize_lang(None) == "ru"
+        assert lang_from_telegram("EN-GB") == "en"
+        assert lang_from_telegram("ru-RU") == "ru"
+        assert lang_from_telegram(None) == "ru"
+
+    def test_translations_onion(self):
+        from src.i18n import TRANSLATIONS, normalize_lang
+
+        for lang in ("ru", "en"):
+            assert "kb_start" in TRANSLATIONS[normalize_lang(lang)]
+
+
 class TestTimerModels:
     def test_timer_config_defaults(self):
         from src.models.timer_models import TimerConfig

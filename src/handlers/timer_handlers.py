@@ -7,8 +7,10 @@ from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from src.services.timer_service import timer_service
+from src.services.user_service import UserService
 from src.utils.timer_ui import TimerUI
 from src.utils.keyboard_service import KeyboardService
+from src.i18n import t
 from src.models.timer_models import (
     TimerType, TimerStatus, TimerPhase, TimerConfig, PranayamaConfig, timer_messages
 )
@@ -19,37 +21,38 @@ logger = logging.getLogger(__name__)
 class TimerHandlers:
     """Обработчики таймера медитации, асан и пранаямы."""
 
-    def __init__(self, bot):
+    def __init__(self, bot, user_service: UserService):
         self.bot = bot
+        self.user_service = user_service
         self.awaiting_meditation_time = set()  # пользователи, ожидающие ввода времени медитации
+
+    async def _lang(self, user_id: int) -> str:
+        return await self.user_service.get_language(user_id)
 
     # Главное меню таймера
     async def timer_main_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
         timer_messages[callback_query.from_user.id] = callback_query.message.message_id
+        lang = await self._lang(callback_query.from_user.id)
 
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🕐 **Таймер для практики**\n\n"
-            "Выбери тип практики:\n"
-            "🧘 Медитация — простая практика осознанности\n"
-            "🧘‍♂️ Асана — практика поз с чередованием работы/отдыха\n"
-            "🌬️ Пранаяма — дыхательные упражнения",
-            reply_markup=TimerUI.get_main_menu(),
+            text=t(lang, "timer_main_text"),
+            reply_markup=TimerUI.get_main_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     # Медитация
     async def meditation_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🧘 **Медитация**\n\n"
-            "Выбери длительность практики:",
-            reply_markup=TimerUI.get_meditation_menu(),
+            text=t(lang, "med_menu_text"),
+            reply_markup=TimerUI.get_meditation_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -65,16 +68,16 @@ class TimerHandlers:
         except ValueError:
             return
 
+        lang = await self._lang(callback_query.from_user.id)
+
         session = timer_service.create_meditation_timer(callback_query.from_user.id, minutes)
         timer_service.start_timer(callback_query.from_user.id)
 
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=f"🧘 Медитация на {minutes} минут начата!\n\n"
-            "Сконцентрируйся на дыхании и будь настоящем моменте. 🙏\n\n"
-            "Используй кнопки управления ниже:",
-            reply_markup=TimerUI.get_control_keyboard(session)
+            text=t(lang, "med_started", minutes=minutes),
+            reply_markup=TimerUI.get_control_keyboard(session, lang)
         )
 
         timer_messages[callback_query.from_user.id] = callback_query.message.message_id
@@ -83,17 +86,15 @@ class TimerHandlers:
         """Запрос ручного ввода времени медитации."""
         await self.bot.answer_callback_query(callback_query.id)
         self.awaiting_meditation_time.add(callback_query.from_user.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="⌨️ **Ввод времени медитации**\n\n"
-            "Напиши количество минут (от 1 до 120):\n"
-            "Например: 7 или 15 или 45\n\n"
-            "Используй обычное сообщение, а не кнопку.",
+            text=t(lang, "med_custom_prompt"),
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="🔙 Назад", callback_data="timer_meditation")]
+                    [InlineKeyboardButton(text=t(lang, "kb_back"), callback_data="timer_meditation")]
                 ]
             ),
             parse_mode=ParseMode.MARKDOWN
@@ -103,18 +104,16 @@ class TimerHandlers:
         """Обработка ручного ввода времени медитации."""
         user_id = message.from_user.id
         text = message.text.strip()
+        lang = await self._lang(user_id)
 
         if not text.isdigit():
             if user_id not in self.awaiting_meditation_time:
-                await message.reply(
-                    "Используй кнопки меню или команду /start. "
-                    "Для таймера нажми «⏱️ Таймер» 😉"
-                )
+                await message.reply(t(lang, "med_not_digit"))
             return
 
         minutes = int(text)
         if minutes < 1 or minutes > 120:
-            await message.reply("⚠️ Время должно быть от 1 до 120 минут. Попробуй еще раз.")
+            await message.reply(t(lang, "med_range_error"))
             return
 
         self.awaiting_meditation_time.discard(user_id)
@@ -123,17 +122,13 @@ class TimerHandlers:
         timer_service.start_timer(user_id)
 
         timer_message = await message.answer(
-            f"🧘 Медитация на {minutes} минут начата!\n\n"
-            "Сконцентрируйся на дыхании и будь настоящем моменте. 🙏\n\n"
-            "Используй кнопки управления ниже:",
-            reply_markup=TimerUI.get_control_keyboard(session)
+            t(lang, "med_started", minutes=minutes),
+            reply_markup=TimerUI.get_control_keyboard(session, lang)
         )
         timer_messages[user_id] = timer_message.message_id
 
         notification_message = await message.answer(
-            f"🔔 **Медитация началась!**\n\n"
-            f"Длительность: {minutes} минут\n"
-            "Сосредоточься на дыхании... 🧘",
+            t(lang, "med_notification", minutes=minutes),
             parse_mode=ParseMode.MARKDOWN
         )
         asyncio.create_task(self.delete_notification_after_delay(user_id, notification_message.message_id, 2))
@@ -142,6 +137,7 @@ class TimerHandlers:
     async def asana_callback(self, callback_query: types.CallbackQuery):
         """Меню конфигурации асан."""
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         if session and session.timer_type == TimerType.ASANA:
@@ -159,12 +155,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=f"🧘‍♂️ **Таймер асан**\n\n"
-            f"⏱️ Работа: {work_text}\n"
-            f"⏸️ Отдых: {rest_text}\n"
-            f"🔄 Циклы: {config.cycles}\n\n"
-            "Настрой параметры или начни практику:",
-            reply_markup=TimerUI.get_asana_config_menu(),
+            text=t(lang, "asana_menu_text", work=work_text, rest=rest_text, cycles=config.cycles),
+            reply_markup=TimerUI.get_asana_config_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -174,6 +166,7 @@ class TimerHandlers:
 
     async def asana_config_work_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_duration = session.work_duration if session and session.timer_type == TimerType.ASANA else 60
@@ -181,13 +174,14 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="⏱️ **Выбери время работы:**",
-            reply_markup=TimerUI.get_work_duration_menu(current_duration),
+            text=t(lang, "asana_choose_work"),
+            reply_markup=TimerUI.get_work_duration_menu(current_duration, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     async def asana_config_rest_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_duration = session.rest_duration if session and session.timer_type == TimerType.ASANA else 20
@@ -195,13 +189,14 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="⏸️ **Выбери время отдыха:**",
-            reply_markup=TimerUI.get_rest_duration_menu(current_duration),
+            text=t(lang, "asana_choose_rest"),
+            reply_markup=TimerUI.get_rest_duration_menu(current_duration, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     async def asana_config_cycles_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_cycles = session.cycles if session and session.timer_type == TimerType.ASANA else 5
@@ -209,8 +204,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🔄 **Выбери количество циклов:**",
-            reply_markup=TimerUI.get_cycles_menu(current_cycles),
+            text=t(lang, "asana_choose_cycles"),
+            reply_markup=TimerUI.get_cycles_menu(current_cycles, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -279,6 +274,7 @@ class TimerHandlers:
         await self.bot.answer_callback_query(callback_query.id)
 
         user_id = callback_query.from_user.id
+        lang = await self._lang(user_id)
         session = timer_service.get_session(user_id)
         if not session or session.timer_type != TimerType.ASANA:
             session = timer_service.create_asana_timer(user_id, TimerConfig())
@@ -291,12 +287,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=f"🧘‍♂️ **Практика асан начата!**\n\n"
-            f"⏱️ Работа: {work_text}\n"
-            f"⏸️ Отдых: {rest_text}\n"
-            f"🔄 Циклы: {session.cycles}\n\n"
-            "Начинаем с первого подхода! 💪",
-            reply_markup=TimerUI.get_control_keyboard(session),
+            text=t(lang, "asana_started", work=work_text, rest=rest_text, cycles=session.cycles),
+            reply_markup=TimerUI.get_control_keyboard(session, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -306,6 +298,7 @@ class TimerHandlers:
     async def pranayama_callback(self, callback_query: types.CallbackQuery):
         """Меню пранаямы."""
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         if session and session.timer_type == TimerType.PRANAYAMA:
@@ -323,12 +316,11 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=f"🌬️ **Пранаяма**\n\n"
-            f"📊 Упражнений: {exercises}\n"
-            f"⏱️ Время упражнения: {exercise_text}\n"
-            f"⏸️ Время отдыха: {rest_text}\n\n"
-            "Настрой параметры или начни практику:",
-            reply_markup=TimerUI.get_pranayama_menu(),
+            text=t(
+                lang, "pranayama_menu_text",
+                exercises=exercises, exercise_time=exercise_text, rest_time=rest_text
+            ),
+            reply_markup=TimerUI.get_pranayama_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -338,6 +330,7 @@ class TimerHandlers:
 
     async def pranayama_exercises_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_exercises = session.exercises if session and session.timer_type == TimerType.PRANAYAMA else 3
@@ -345,13 +338,14 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="📊 **Выбери количество упражнений:**",
-            reply_markup=TimerUI.get_pranayama_exercises_menu(current_exercises),
+            text=t(lang, "pranayama_choose_exercises"),
+            reply_markup=TimerUI.get_pranayama_exercises_menu(current_exercises, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     async def pranayama_exercise_time_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_time = session.exercise_duration if session and session.timer_type == TimerType.PRANAYAMA else 30
@@ -359,13 +353,14 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="⏱️ **Выбери время упражнения:**",
-            reply_markup=TimerUI.get_pranayama_exercise_time_menu(current_time),
+            text=t(lang, "pranayama_choose_ex_time"),
+            reply_markup=TimerUI.get_pranayama_exercise_time_menu(current_time, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     async def pranayama_rest_time_callback(self, callback_query: types.CallbackQuery):
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         session = timer_service.get_session(callback_query.from_user.id)
         current_time = session.rest_duration if session and session.timer_type == TimerType.PRANAYAMA else 20
@@ -373,8 +368,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="⏸️ **Выбери время отдыха:**",
-            reply_markup=TimerUI.get_pranayama_rest_time_menu(current_time),
+            text=t(lang, "pranayama_choose_rest"),
+            reply_markup=TimerUI.get_pranayama_rest_time_menu(current_time, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -444,11 +439,13 @@ class TimerHandlers:
         """Запуск таймера пранаямы."""
         await self.bot.answer_callback_query(callback_query.id)
 
-        session = timer_service.get_session(callback_query.from_user.id)
+        user_id = callback_query.from_user.id
+        lang = await self._lang(user_id)
+        session = timer_service.get_session(user_id)
         if not session or session.timer_type != TimerType.PRANAYAMA:
-            session = timer_service.create_pranayama_timer(callback_query.from_user.id, PranayamaConfig())
+            session = timer_service.create_pranayama_timer(user_id, PranayamaConfig())
         else:
-            timer_service.start_timer(callback_query.from_user.id)
+            timer_service.start_timer(user_id)
 
         exercise_text = f"{session.exercise_duration}с" if session.exercise_duration < 60 else f"{session.exercise_duration//60}м"
         rest_text = f"{session.rest_duration}с" if session.rest_duration < 60 else f"{session.rest_duration//60}м"
@@ -456,12 +453,11 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text=f"🌬️ **Практика пранаямы начата!**\n\n"
-            f"📊 Упражнений: {session.exercises}\n"
-            f"⏱️ Время упражнения: {exercise_text}\n"
-            f"⏸️ Время отдыха: {rest_text}\n\n"
-            "Начинаем с первого упражнения! 🧘‍♂️",
-            reply_markup=TimerUI.get_control_keyboard(session),
+            text=t(
+                lang, "pranayama_started",
+                exercises=session.exercises, exercise_time=exercise_text, rest_time=rest_text
+            ),
+            reply_markup=TimerUI.get_control_keyboard(session, lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -474,6 +470,7 @@ class TimerHandlers:
 
         action = callback_query.data.split('_')[1]  # pause, stop, start, reset, delete
         user_id = callback_query.from_user.id
+        lang = await self._lang(user_id)
 
         if action == "start":
             session = timer_service.start_timer(user_id)
@@ -500,10 +497,8 @@ class TimerHandlers:
 
                 await self.bot.send_message(
                     user_id,
-                    "⏹️ **Таймер остановлен**\n\n"
-                    "Практика завершена. Хорошая работа! 🙏\n\n"
-                    "Хочешь начать новую практику?",
-                    reply_markup=TimerUI.get_main_menu(),
+                    t(lang, "timer_stopped"),
+                    reply_markup=TimerUI.get_main_menu(lang),
                     parse_mode=ParseMode.MARKDOWN
                 )
 
@@ -518,27 +513,28 @@ class TimerHandlers:
                 await self.bot.edit_message_text(
                     chat_id=callback_query.from_user.id,
                     message_id=callback_query.message.message_id,
-                    text="🗑️ Таймер удален\n\n"
-                    "Хочешь начать новую практику?",
-                    reply_markup=TimerUI.get_main_menu()
+                    text=t(lang, "timer_deleted"),
+                    reply_markup=TimerUI.get_main_menu(lang)
                 )
             timer_service.delete_session(user_id)
 
     async def timer_back_callback(self, callback_query: types.CallbackQuery):
         """Возврат в главное меню таймера."""
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🔙 **Возвращаю в главное меню таймера...**",
-            reply_markup=TimerUI.get_main_menu(),
+            text=t(lang, "timer_back"),
+            reply_markup=TimerUI.get_main_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
     async def timer_exit_callback(self, callback_query: types.CallbackQuery):
         """Выход из таймера в главное меню бота."""
         await self.bot.answer_callback_query(callback_query.id)
+        lang = await self._lang(callback_query.from_user.id)
 
         if callback_query.from_user.id in timer_messages:
             del timer_messages[callback_query.from_user.id]
@@ -546,8 +542,8 @@ class TimerHandlers:
         await self.bot.edit_message_text(
             chat_id=callback_query.from_user.id,
             message_id=callback_query.message.message_id,
-            text="🔙 **Выход из таймера...**\n\nВыбери действие ниже 👇",
-            reply_markup=KeyboardService.start_menu(),
+            text=t(lang, "timer_exit"),
+            reply_markup=KeyboardService.start_menu(lang),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -557,11 +553,12 @@ class TimerHandlers:
             return
 
         try:
+            lang = self.user_service.get_cached_language(user_id, "ru")
             await self.bot.edit_message_text(
                 chat_id=user_id,
                 message_id=timer_messages[user_id],
-                text=TimerUI.format_timer_message(session),
-                reply_markup=TimerUI.get_control_keyboard(session),
+                text=TimerUI.format_timer_message(session, lang),
+                reply_markup=TimerUI.get_control_keyboard(session, lang),
                 parse_mode=ParseMode.MARKDOWN
             )
         except Exception as e:
@@ -601,9 +598,10 @@ class TimerHandlers:
                                 timer_service.delete_session(user_id)
 
                                 try:
+                                    lang = self.user_service.get_cached_language(user_id, "ru")
                                     complete_notification = await self.bot.send_message(
                                         user_id,
-                                        "🎉 **Практика завершена!**\n\nОтличная работа! 🙏",
+                                        t(lang, "practice_completed"),
                                         parse_mode=ParseMode.MARKDOWN
                                     )
                                     asyncio.create_task(
@@ -614,11 +612,12 @@ class TimerHandlers:
 
                                 if user_id in timer_messages:
                                     try:
+                                        lang = self.user_service.get_cached_language(user_id, "ru")
                                         await self.bot.edit_message_text(
                                             chat_id=user_id,
                                             message_id=timer_messages[user_id],
-                                            text=TimerUI.format_timer_message(updated_session),
-                                            reply_markup=TimerUI.get_main_menu(),
+                                            text=TimerUI.format_timer_message(updated_session, lang),
+                                            reply_markup=TimerUI.get_main_menu(lang),
                                             parse_mode=ParseMode.MARKDOWN
                                         )
                                     except:
@@ -629,10 +628,11 @@ class TimerHandlers:
                             elif (updated_session.timer_type in [TimerType.ASANA, TimerType.PRANAYAMA] and
                                   old_phase != updated_session.current_phase and
                                   updated_session.rest_duration > 0):
+                                lang = self.user_service.get_cached_language(user_id, "ru")
                                 notification_message = await self.bot.send_message(
                                     user_id,
-                                    TimerUI.get_phase_notification(updated_session),
-                                    reply_markup=TimerUI.get_control_keyboard(updated_session),
+                                    TimerUI.get_phase_notification(updated_session, lang),
+                                    reply_markup=TimerUI.get_control_keyboard(updated_session, lang),
                                     parse_mode=ParseMode.MARKDOWN
                                 )
                                 asyncio.create_task(self.delete_notification_after_delay(user_id, notification_message.message_id, 2))

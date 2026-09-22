@@ -29,15 +29,19 @@ async def main():
     )
     dp = Dispatcher()
 
-    command_handlers = CommandHandlers(bot, UserService(API_URL))
-    timer_handlers = TimerHandlers(bot)
+    user_service = UserService(API_URL)
+    command_handlers = CommandHandlers(bot, user_service)
+    timer_handlers = TimerHandlers(bot, user_service)
 
     dp.message.register(command_handlers.start_command, CommandStart())
     dp.message.register(command_handlers.help_command, Command("help"))
     dp.message.register(command_handlers.about_us_command, Command("about_us"))
+    dp.message.register(command_handlers.language_command, Command("language"))
 
     # Главное меню (inline-кнопки)
     dp.callback_query.register(command_handlers.about_us_callback, lambda c: c.data == "about_us")
+    dp.callback_query.register(command_handlers.language_menu_callback, lambda c: c.data == "lang_menu")
+    dp.callback_query.register(command_handlers.language_set_callback, lambda c: c.data in ("lang_set_ru", "lang_set_en"))
 
     # Ввод времени медитации (цифровое сообщение)
     dp.message.register(
