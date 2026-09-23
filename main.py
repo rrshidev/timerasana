@@ -6,7 +6,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 from aiogram.client.default import DefaultBotProperties
 
-from config import BOT_TOKEN, API_URL
+from config import BOT_TOKEN, API_URL, TIMER_BOT_KEY
 from src.handlers.command_handlers import CommandHandlers
 from src.handlers.timer_handlers import TimerHandlers
 from src.handlers.routing import register_all
@@ -30,7 +30,7 @@ async def main():
     )
     dp = Dispatcher()
 
-    user_service = UserService(API_URL)
+    user_service = UserService(API_URL, timer_bot_key=TIMER_BOT_KEY)
     command_handlers = CommandHandlers(bot, user_service)
     timer_handlers = TimerHandlers(bot, user_service)
 

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Dict, Optional
 
 import httpx
@@ -16,8 +17,9 @@ class UserService:
     По умолчанию берётся язык из настроек Telegram пользователя.
     """
 
-    def __init__(self, api_url: str):
+    def __init__(self, api_url: str, timer_bot_key: str = ""):
         self.api_url = api_url
+        self.timer_bot_key = timer_bot_key
         self._lang_cache: Dict[int, str] = {}
 
     async def register_or_sync(
@@ -110,4 +112,45 @@ class UserService:
             logger.warning(f"Set language failed for {telegram_id}: {resp.status_code} {resp.text}")
         except Exception as e:
             logger.error(f"Error setting language for {telegram_id}: {e}")
+        return False
+
+    async def record_practice(
+        self,
+        telegram_id: int,
+        practice_type: str,
+        total_duration_seconds: int,
+        started_at: Optional[datetime] = None,
+        completed_at: Optional[datetime] = None,
+    ) -> bool:
+        """Записать завершённую практику таймера в общую статистику Dharana.
+
+        POST /api/v1/practice/timer (аутентификация по X-Timer-Key).
+        Не блокирует пользователя: при сбое только логируем — статистика
+        не должна ломать практику.
+        """
+        try:
+            headers = {"X-Timer-Key": self.timer_bot_key} if self.timer_bot_key else {}
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.api_url}/api/v1/practice/timer",
+                    headers=headers,
+                    json={
+                        "telegram_id": telegram_id,
+                        "practice_type": practice_type,
+                        "total_duration_seconds": total_duration_seconds,
+                        "started_at": started_at.isoformat() if started_at else None,
+                        "completed_at": completed_at.isoformat() if completed_at else None,
+                    },
+                    timeout=10,
+                )
+            if resp.status_code == 200:
+                logger.info(
+                    f"Practice recorded for {telegram_id}: "
+                    f"{practice_type} {total_duration_seconds}s "
+                    f"(record id={resp.json().get('id', 'n/a')})"
+                )
+                return True
+            logger.warning(f"Record practice failed for {telegram_id}: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"Error recording practice for {telegram_id}: {e}")
         return False

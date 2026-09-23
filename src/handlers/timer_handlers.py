@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import re
+from datetime import datetime
 
 from aiogram import types
 from aiogram.enums import ParseMode
@@ -596,6 +597,22 @@ class TimerHandlers:
                             if updated_session.status == TimerStatus.COMPLETED:
                                 timer_message_id = timer_messages.get(user_id)
                                 timer_service.delete_session(user_id)
+
+                                # Запись практики в общую статистику Dharana (не блокирует цикл).
+                                total_seconds = max(updated_session.total_elapsed, updated_session.elapsed)
+                                if total_seconds > 0:
+                                    practice_type = updated_session.timer_type.value
+                                    asyncio.create_task(
+                                        self.user_service.record_practice(
+                                            telegram_id=user_id,
+                                            practice_type=practice_type,
+                                            total_duration_seconds=total_seconds,
+                                            started_at=updated_session.start_time,
+                                            completed_at=datetime.now(),
+                                        )
+                                    )
+                                else:
+                                    logger.info(f"Skipped practice record for {user_id}: zero duration")
 
                                 try:
                                     lang = self.user_service.get_cached_language(user_id, "ru")
