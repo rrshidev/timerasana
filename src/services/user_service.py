@@ -119,6 +119,7 @@ class UserService:
         telegram_id: int,
         practice_type: str,
         total_duration_seconds: int,
+        cycles: int = 0,
         started_at: Optional[datetime] = None,
         completed_at: Optional[datetime] = None,
     ) -> bool:
@@ -138,6 +139,7 @@ class UserService:
                         "telegram_id": telegram_id,
                         "practice_type": practice_type,
                         "total_duration_seconds": total_duration_seconds,
+                        "cycles": cycles,
                         "started_at": started_at.isoformat() if started_at else None,
                         "completed_at": completed_at.isoformat() if completed_at else None,
                     },

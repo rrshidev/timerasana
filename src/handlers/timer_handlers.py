@@ -599,7 +599,13 @@ class TimerHandlers:
                                 timer_service.delete_session(user_id)
 
                                 # Запись практики в общую статистику Dharana (не блокирует цикл).
-                                total_seconds = max(updated_session.total_elapsed, updated_session.elapsed)
+                                if updated_session.timer_type == TimerType.MEDITATION:
+                                    total_seconds = max(updated_session.total_elapsed, updated_session.elapsed)
+                                else:
+                                    # Для асан/пранаямы elapsed сбрасывается на каждой фазе,
+                                    # а total_elapsed растёт только при паузе — итог равен
+                                    # суммарному времени работы: циклы × work.
+                                    total_seconds = updated_session.cycles * updated_session.work_duration
                                 if total_seconds > 0:
                                     practice_type = updated_session.timer_type.value
                                     asyncio.create_task(
@@ -607,6 +613,7 @@ class TimerHandlers:
                                             telegram_id=user_id,
                                             practice_type=practice_type,
                                             total_duration_seconds=total_seconds,
+                                            cycles=updated_session.cycles,
                                             started_at=updated_session.start_time,
                                             completed_at=datetime.now(),
                                         )
