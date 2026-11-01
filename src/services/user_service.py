@@ -22,6 +22,10 @@ class UserService:
         self.timer_bot_key = timer_bot_key
         self._lang_cache: Dict[int, str] = {}
 
+    def _headers(self) -> Dict[str, str]:
+        """API принимает /auth/telegram* только от таймер-бота (X-Timer-Key)."""
+        return {"X-Timer-Key": self.timer_bot_key} if self.timer_bot_key else {}
+
     async def register_or_sync(
         self,
         telegram_id: int,
@@ -43,6 +47,7 @@ class UserService:
                         "username": username,
                         "language": language or "ru",
                     },
+                    headers=self._headers(),
                     timeout=10,
                 )
             if resp.status_code == 200:
@@ -70,6 +75,7 @@ class UserService:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
                     f"{self.api_url}/api/v1/auth/telegram/{telegram_id}/language",
+                    headers=self._headers(),
                     timeout=10,
                 )
             if resp.status_code == 200:
@@ -102,6 +108,7 @@ class UserService:
                 resp = await client.put(
                     f"{self.api_url}/api/v1/auth/telegram/{telegram_id}/language",
                     json={"language": lang},
+                    headers=self._headers(),
                     timeout=10,
                 )
             if resp.status_code == 200:
@@ -130,11 +137,10 @@ class UserService:
         не должна ломать практику.
         """
         try:
-            headers = {"X-Timer-Key": self.timer_bot_key} if self.timer_bot_key else {}
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     f"{self.api_url}/api/v1/practice/timer",
-                    headers=headers,
+                    headers=self._headers(),
                     json={
                         "telegram_id": telegram_id,
                         "practice_type": practice_type,
