@@ -54,6 +54,10 @@ RU = {
         'Полезные ссылки:\n'
         '• Основной бот Dharana — [@yogaasana_bot](https://t.me/yogaasana_bot)\n'
         '• Веб-приложение — [dharana.ru](https://dharana.ru)\n\n'
+        '🔒 **Конфиденциальность**\n'
+        'При запуске бота мы сохраняем ваш Telegram ID, имя и username, '
+        'чтобы бот мог работать. Запуская бота, вы соглашаетесь с '
+        '[Политикой конфиденциальности](https://dharana.ru/ru/privacy).\n\n'
         'Выбери действие ниже 👇'
     ),
     'help_text': (
@@ -83,6 +87,10 @@ RU = {
         'Связаться с нами:\n'
         '@RrshiDev · @yogaolleg\n'
         'instagram.com/yogaolleg/\n\n'
+        '🔒 **Персональные данные**\n'
+        'Мы обрабатываем Telegram ID, имя и username, чтобы бот работал. '
+        'Подробнее: [Политика конфиденциальности](https://dharana.ru/ru/privacy) · '
+        '[Согласие на обработку персональных данных](https://dharana.ru/ru/consent).\n\n'
         'Хорошей практики! 🙏'
     ),
 
@@ -270,6 +278,10 @@ EN = {
         'Useful links:\n'
         '• Main Dharana bot — [@yogaasana_bot](https://t.me/yogaasana_bot)\n'
         '• Web app — [dharana.ru](https://dharana.ru)\n\n'
+        '🔒 **Privacy**\n'
+        'When you start the bot, we store your Telegram ID, first name and username '
+        'so that the bot can work. By starting the bot, you agree to the '
+        '[Privacy Policy](https://dharana.ru/en/privacy).\n\n'
         'Choose an action below 👇'
     ),
     'help_text': (
@@ -299,6 +311,10 @@ EN = {
         'Reach us:\n'
         '@RrshiDev · @yogaolleg\n'
         'instagram.com/yogaolleg/\n\n'
+        '🔒 **Personal data**\n'
+        'We process your Telegram ID, first name and username so that the bot can work. '
+        'Learn more: [Privacy Policy](https://dharana.ru/en/privacy) · '
+        '[Consent to personal data processing](https://dharana.ru/en/consent).\n\n'
         'Happy practice! 🙏'
     ),
 
